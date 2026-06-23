@@ -1,0 +1,22 @@
+Подсчёт свободных мест
+CREATE OR REPLACE FUNCTION free_places (
+    code_r IN room.code_room%TYPE
+) RETURN NUMBER
+AS
+    place NUMBER;
+    cap   NUMBER;
+BEGIN
+    -- Подсчёт количества занятых мест в номере
+    SELECT COUNT(code_residents) INTO place
+    FROM residents
+    WHERE code_room = code_r;
+
+    -- Определение вместимости номера из категории
+    SELECT capacity_category INTO cap
+    FROM room
+    JOIN categories USING (code_category)
+    WHERE code_room = code_r;
+
+    -- Возврат количества свободных мест
+    RETURN cap - place;
+END free_places;
