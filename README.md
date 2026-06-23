@@ -22,6 +22,10 @@
 Жильцы - Просмотр доступных дополнительных услуг 
 
 Структура базы данных
+https://github.com/d-kuz/hotel-database-system/blob/main/database.png
+
+Структура хранилища
+https://github.com/d-kuz/hotel-database-system/blob/main/storage.png
 
 
 
