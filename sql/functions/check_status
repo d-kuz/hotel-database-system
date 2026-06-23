@@ -1,0 +1,44 @@
+Функция проверки возможности заселения, включая половую совместимость
+CREATE OR REPLACE FUNCTION check_status (
+    code_r IN room.code_room%TYPE,
+    code_p IN person.code_person%TYPE
+) RETURN NUMBER
+AS
+    p_sex     VARCHAR(10);
+    room_sex  VARCHAR(10);
+    status_code NUMBER;
+BEGIN
+    -- Пол заселяемого человека
+    SELECT sex INTO p_sex
+    FROM person
+    WHERE code_person = code_p;
+
+    -- Статус номера
+    SELECT code_status INTO status_code
+    FROM room
+    WHERE code_room = code_r;
+
+    -- Если номер свободен — заселение разрешено
+    IF status_code = 2 THEN  -- 'Свободен'
+        RETURN 1;
+    END IF;
+
+    -- Пол номера (определяем по первому жильцу)
+    SELECT sex INTO room_sex
+    FROM residents
+    JOIN person USING (code_person)
+    WHERE code_room = code_r
+    AND ROWNUM = 1;
+
+    -- Сравнение полов
+    IF p_sex = room_sex THEN
+        RETURN 1;
+    ELSE
+        RETURN 0;
+    END IF;
+
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RETURN 1;  -- Если жильцов нет, заселение разрешено
+END check_status;
+/
