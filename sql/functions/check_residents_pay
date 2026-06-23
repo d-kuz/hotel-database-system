@@ -1,0 +1,26 @@
+Проверка долга/переплаты за проживание
+CREATE OR REPLACE FUNCTION check_residents_pay (
+    code_p IN person.code_person%TYPE
+) RETURN NUMBER
+AS
+    r NUMBER;  -- Внесённая сумма
+    s NUMBER;  -- Начисленная сумма
+BEGIN
+    s := 0;
+    r := 0;
+
+    -- Сумма начисленного за проживание
+    SELECT SUM(summa) INTO s
+    FROM pay_residents
+    JOIN residents USING (code_residents)
+    WHERE code_person = code_p;
+
+    -- Сумма внесённых денег за проживание
+    SELECT SUM(enter_money) INTO r
+    FROM pay_residents
+    JOIN residents USING (code_residents)
+    WHERE code_person = code_p;
+
+    -- Возврат разницы (положительное = долг, отрицательное = переплата)
+    RETURN r - s;
+END check_residents_pay;
