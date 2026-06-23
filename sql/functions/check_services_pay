@@ -1,0 +1,27 @@
+Проверка долга/сдачи за услуги
+
+CREATE OR REPLACE FUNCTION check_services_pay (
+    code_p IN person.code_person%TYPE
+) RETURN NUMBER
+AS
+    r NUMBER;  -- Внесённая сумма
+    s NUMBER;  -- Начисленная сумма
+BEGIN
+    s := 0;
+    r := 0;
+
+    -- Сумма начисленных услуг
+    SELECT SUM(summa) INTO s
+    FROM pay_services
+    JOIN residents USING (code_residents)
+    WHERE code_person = code_p;
+
+    -- Сумма внесённых денег за услуги
+    SELECT SUM(enter_money) INTO r
+    FROM pay_services
+    JOIN residents USING (code_residents)
+    WHERE code_person = code_p;
+
+    -- Возврат разницы (положительное = долг, отрицательное = переплата)
+    RETURN r - s;
+END check_services_pay;
