@@ -1,0 +1,60 @@
+Процедура заселения 
+
+Create or replace procedure check_in (code_r room.code_room%type, 
+code_p person.code_person%type, 
+date_out residents.date_check_out%type,
+date_in residents.date_check_in%type, n_people number,
+err out varchar)
+as
+p_sex varchar(10);
+cap number;
+
+begin
+
+select capacity_category into cap from room join categories using(code_category)
+where code_room = code_r;
+
+err:= 'Выполнено заселение';
+
+if n_people = 1 then
+   if (free_places(code_r) > 0) and (check_status(code_r, code_p) = 1) then
+
+      select sex into p_sex from person
+      where code_person = code_p;
+
+      if (free_places(code_r) = 1) and (cap >= 1) then
+         update room set code_status = '1'
+         where code_room = code_r;
+      end if;
+
+      if (free_places(code_r) = cap) and (p_sex = 'Ж') then
+         update room set code_status = '3'
+         where code_room = code_r;
+      end if;
+
+      if (free_places(code_r) = cap) and (p_sex = 'М') then
+         update room set code_status = '4'
+         where code_room = code_r;
+      end if;
+
+      insert into residents (date_check_out, date_check_in, code_room, code_person) values 
+      (date_out, date_in, code_r, code_p);
+
+   else
+      err := 'Не удалось выполнить заселение';
+   end if;
+end if;
+
+if n_people > 1 then
+   if (free_places(code_r) = cap) and (n_people <= cap) then
+      update room set code_status = '1'
+      where code_room = code_r;
+
+      insert into residents (date_check_out, date_check_in, code_room, code_person) values 
+      (date_out, date_in, code_r, code_p);
+   else
+      err := 'Не удалось выполнить заселение';
+   end if;
+
+end if;
+end;
