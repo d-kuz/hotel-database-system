@@ -1,60 +1,67 @@
 Процедура заселения 
 
-Create or replace procedure check_in (code_r room.code_room%type, 
-code_p person.code_person%type, 
-date_out residents.date_check_out%type,
-date_in residents.date_check_in%type, n_people number,
-err out varchar)
-as
-p_sex varchar(10);
-cap number;
+CREATE OR REPLACE PROCEDURE check_in (
+    code_r    IN room.code_room%TYPE,
+    code_p    IN person.code_person%TYPE,
+    date_out  IN residents.date_check_out%TYPE,
+    date_in   IN residents.date_check_in%TYPE,
+    n_people  IN NUMBER,
+    err       OUT VARCHAR2
+)
+AS
+    p_sex VARCHAR(10);
+    cap   NUMBER;
+BEGIN
+    -- Определение вместимости номера
+    SELECT capacity_category INTO cap
+    FROM room
+    JOIN categories USING (code_category)
+    WHERE code_room = code_r;
 
-begin
+    err := 'Выполнено заселение';
 
-select capacity_category into cap from room join categories using(code_category)
-where code_room = code_r;
+    -- Заселение одного человека
+    IF n_people = 1 THEN
+        IF (free_places(code_r) > 0) AND (check_status(code_r, code_p) = 1) THEN
+            SELECT sex INTO p_sex
+            FROM person
+            WHERE code_person = code_p;
 
-err:= 'Выполнено заселение';
+            -- Если после заселения мест не осталось — номер занят
+            IF (free_places(code_r) = 1) AND (cap >= 1) THEN
+                UPDATE room SET code_status = 1  -- 'Занят'
+                WHERE code_room = code_r;
+            END IF;
 
-if n_people = 1 then
-   if (free_places(code_r) > 0) and (check_status(code_r, code_p) = 1) then
+            -- Если номер полностью свободен и заселяется женщина
+            IF (free_places(code_r) = cap) AND (p_sex = 'Ж') THEN
+                UPDATE room SET code_status = 3  -- 'Свободен для женщин'
+                WHERE code_room = code_r;
+            END IF;
 
-      select sex into p_sex from person
-      where code_person = code_p;
+            -- Если номер полностью свободен и заселяется мужчина
+            IF (free_places(code_r) = cap) AND (p_sex = 'М') THEN
+                UPDATE room SET code_status = 4  -- 'Свободен для мужчин'
+                WHERE code_room = code_r;
+            END IF;
 
-      if (free_places(code_r) = 1) and (cap >= 1) then
-         update room set code_status = '1'
-         where code_room = code_r;
-      end if;
+            INSERT INTO residents (date_check_out, date_check_in, code_room, code_person)
+            VALUES (date_out, date_in, code_r, code_p);
+        ELSE
+            err := 'Не удалось выполнить заселение';
+        END IF;
+    END IF;
 
-      if (free_places(code_r) = cap) and (p_sex = 'Ж') then
-         update room set code_status = '3'
-         where code_room = code_r;
-      end if;
+    -- Заселение семьи (более одного человека)
+    IF n_people > 1 THEN
+        IF (free_places(code_r) = cap) AND (n_people <= cap) THEN
+            UPDATE room SET code_status = 1  -- 'Занят'
+            WHERE code_room = code_r;
 
-      if (free_places(code_r) = cap) and (p_sex = 'М') then
-         update room set code_status = '4'
-         where code_room = code_r;
-      end if;
-
-      insert into residents (date_check_out, date_check_in, code_room, code_person) values 
-      (date_out, date_in, code_r, code_p);
-
-   else
-      err := 'Не удалось выполнить заселение';
-   end if;
-end if;
-
-if n_people > 1 then
-   if (free_places(code_r) = cap) and (n_people <= cap) then
-      update room set code_status = '1'
-      where code_room = code_r;
-
-      insert into residents (date_check_out, date_check_in, code_room, code_person) values 
-      (date_out, date_in, code_r, code_p);
-   else
-      err := 'Не удалось выполнить заселение';
-   end if;
-
-end if;
-end;
+            INSERT INTO residents (date_check_out, date_check_in, code_room, code_person)
+            VALUES (date_out, date_in, code_r, code_p);
+        ELSE
+            err := 'Не удалось выполнить заселение';
+        END IF;
+    END IF;
+END check_in;
