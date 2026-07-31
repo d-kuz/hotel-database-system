@@ -27,5 +27,8 @@ https://github.com/d-kuz/hotel-database-system/blob/d1c1bb7652538f62c952cc23ebf0
 Структура хранилища
 https://github.com/d-kuz/hotel-database-system/blob/d5e3bc095e125e76f04d71534c025af3331c598c/images/storage.png
 
+Бизнес-требования
+https://github.com/d-kuz/hotel-database-system/blob/517aff15c5094b1757d854df711bc0af60677cce/description/business_requirements
 
-
+Бизнес-правила
+https://github.com/d-kuz/hotel-database-system/blob/3cdf94d9c740ced09131a47a2d28c69b3b98af65/description/business_rules
