@@ -15,19 +15,15 @@
 
 Система разделена на два логических уровня:
 
-  Оперативная БД (OLTP):
+  [Оперативная БД (OLTP)](https://github.com/d-kuz/hotel-database-system/blob/d1c1bb7652538f62c952cc23ebf0930a3ad1c385/images/database.png):
   Оптимизирована для быстрых транзакций (заселение, выселение, оплата). Содержит нормализованные таблицы persons, rooms, categories, residents, pay_residents, pay_services.
  
-  Хранилище данных (DWH):
+ Структура базы данных:
+ 
+
+
+  [Хранилище данных (DWH)](https://github.com/d-kuz/hotel-database-system/blob/d5e3bc095e125e76f04d71534c025af3331c598c/images/storage.png):
   Оптимизировано для аналитических запросов. Использует схему «звезда» с таблицей фактов h_fact_table и измерениями (h_person_dim, h_room_dim, h_time_dim). Данные переносятся сюда триггером/процедурой при выселении (check_out_person).
-
-
-Структура базы данных 
-https://github.com/d-kuz/hotel-database-system/blob/d1c1bb7652538f62c952cc23ebf0930a3ad1c385/images/database.png
-
-Структура хранилища
-https://github.com/d-kuz/hotel-database-system/blob/d5e3bc095e125e76f04d71534c025af3331c598c/images/storage.png
-
 Бизнес-требования
 https://github.com/d-kuz/hotel-database-system/blob/517aff15c5094b1757d854df711bc0af60677cce/description/business_requirements
 
