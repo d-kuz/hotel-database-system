@@ -72,5 +72,4 @@
 
 ##  Документация
 
- - [Бизнес-требования](description/business_requirements)
  - [Бизнес-правила](description/business_rules)
