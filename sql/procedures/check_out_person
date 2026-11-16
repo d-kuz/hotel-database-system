@@ -1,8 +1,7 @@
-Выселение жильца
 CREATE OR REPLACE PROCEDURE check_out_person (
-    code_p        IN person.code_person%TYPE,
-    date_out      IN residents.date_check_out%TYPE,
-    n_people      IN NUMBER,
+    code_p        IN  person.code_person%TYPE,
+    date_out      IN  residents.date_check_out%TYPE,
+    n_people      IN  NUMBER,
     err           OUT VARCHAR2,
     err1          OUT VARCHAR2,
     err2          OUT VARCHAR2,
@@ -10,190 +9,148 @@ CREATE OR REPLACE PROCEDURE check_out_person (
     err_count_s   OUT NUMBER
 )
 AS
-    p_sex    VARCHAR(10);
-    code_c   NUMBER;
-    cap      NUMBER;
-    free_pl  NUMBER;
-    c_res    NUMBER;
-    code_r   NUMBER;
+    p_sex           person.sex%TYPE;                -- Пол выселяемого жильца ('М' или 'Ж')
+    p_code_c        room.code_category%TYPE;        -- Код категории номера
+    p_cap           room.capacity_category%TYPE;    -- Максимальная вместимость номера
+    p_free_pl       NUMBER;                         -- Количество свободных мест в номере на момент выселения
+    p_c_res         residents.code_residents%TYPE;  -- Уникальный идентификатор записи о проживании жильца
+    p_code_r        room.code_room%TYPE;            -- Код комнаты, из которой выселяют
+    p_date_check_in residents.date_check_in%TYPE;   -- Дата въезда жильца (для исторической таблицы)
+    p_sum_res       NUMBER;                         -- Суммарная оплата за проживание (по данной записи)
+    p_sum_serv      NUMBER;                         -- Суммарная оплата за дополнительные услуги
+    p_new_status    room.code_status%TYPE;          -- Результирующий код статуса номера после выселения
 BEGIN
+
     err := 'Не выполнено выселение!';
 
-    -- Проверка задолженности
+    IF n_people IS NULL OR n_people < 1 THEN
+        err := 'Некорректное количество выселяемых';
+        RETURN;
+    END IF;
+
+    -- Проверка задолженностей через функции.
     err_count_r := check_residents_pay(code_p);
     err_count_s := check_services_pay(code_p);
 
-    -- Получение данных о жильце
-    SELECT code_residents INTO c_res
-    FROM residents
-    WHERE code_person = code_p;
 
-    SELECT code_room INTO code_r
-    FROM residents
-    WHERE code_person = code_p;
+    -- Получение данных о проживании и жильце.
+    BEGIN
+        SELECT r.code_residents, r.code_room, r.date_check_in,
+               rm.capacity_category, rm.code_category, p.sex
+          INTO p_c_res, p_code_r, p_date_check_in, p_cap, p_code_c, p_sex
+          FROM residents r
+          JOIN room rm ON rm.code_room = r.code_room
+          JOIN person p ON p.code_person = r.code_person
+         WHERE r.code_person = code_p
+           AND ROWNUM = 1;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            err := 'Жилец не найден в таблице заселенных';
+            RETURN;
+    END;
 
-    -- =====================================================
-    -- Если задолженности нет — выполняем выселение
-    -- =====================================================
-    IF ((err_count_r = 0) AND (err_count_s = 0)) THEN
-        err := 'Выполнено выселение!';
 
-        SELECT capacity_category INTO cap
-        FROM room
-        JOIN categories USING (code_category)
-        WHERE code_room = code_r;
+    -- Проверка долгов/переплат
 
-        SELECT code_category INTO code_c
-        FROM room
-        JOIN categories USING (code_category)
-        WHERE code_room = code_r;
+    IF err_count_r = 0 AND err_count_s = 0 THEN
 
-        free_pl := free_places(code_r);
+        p_free_pl := free_places(p_code_r);
 
-        SELECT sex INTO p_sex
-        FROM person
-        WHERE code_person = code_p;
-
-        -- Выселение одного человека
+        -- Определение нового статуса номера.
         IF n_people = 1 THEN
-            -- Если номер был полностью занят — меняем статус
-            IF (free_pl = 0) THEN
-                IF (p_sex = 'Ж') THEN
-                    UPDATE room SET code_status = 3  -- 'Свободен для женщин'
-                    WHERE code_room = code_r;
-                END IF;
-                IF (p_sex = 'М') THEN
-                    UPDATE room SET code_status = 4  -- 'Свободен для мужчин'
-                    WHERE code_room = code_r;
+            IF p_free_pl + 1 = p_cap THEN
+                p_new_status := 2; -- 'Свободен'
+            ELSIF p_free_pl = 0 THEN
+                IF p_sex = 'Ж' THEN
+                    p_new_status := 3; -- 'Свободен для женщин'
+                ELSIF p_sex = 'М' THEN
+                    p_new_status := 4; -- 'Свободен для мужчин'
                 END IF;
             END IF;
-
-            -- Если после выселения номер становится пустым
-            IF (free_pl + 1 = cap) THEN
-                UPDATE room SET code_status = 2  -- 'Свободен'
-                WHERE code_room = code_r;
-            END IF;
-
-            -- Перенос данных в хранилище (таблица фактов)
-            INSERT INTO h_fact_table (
-                h_id_residents,
-                h_date_begin,
-                h_date_end,
-                h_enter_money_services,
-                h_enter_money_residents,
-                h_code_room,
-                h_code_category,
-                h_code_person
-            ) VALUES (
-                c_res,
-                (SELECT date_check_in FROM residents WHERE code_person = code_p),
-                date_out,
-                (SELECT SUM(summa) FROM pay_residents WHERE code_residents = c_res),
-                (SELECT SUM(summa) FROM pay_services WHERE code_residents = c_res),
-                code_r,
-                code_c,
-                code_p
-            );
-
-            -- Перенос данных по услугам в хранилище
-            INSERT INTO h_pay_services (
-                h_code_pay_services,
-                h_count,
-                h_summa,
-                h_enter_money,
-                h_code_services,
-                h_date_pay,
-                h_id_residents
-            )
-            SELECT
-                code_pay_services,
-                count,
-                summa,
-                enter_money,
-                code_services,
-                date_pay,
-                code_residents
-            FROM pay_services
-            WHERE code_residents = c_res;
-
-            -- Очистка оперативных таблиц
-            DELETE FROM pay_services WHERE code_residents = c_res;
-            DELETE FROM pay_residents WHERE code_residents = c_res;
-            DELETE FROM residents WHERE code_person = code_p;
+        ELSE -- Выселение группы / семьи (> 1 человека)
+            p_new_status := 2;     -- 'Свободен'
         END IF;
 
-        -- Выселение семьи (более одного человека)
-        IF n_people > 1 THEN
-            -- Номер освобождается полностью
-            UPDATE room SET code_status = 2  -- 'Свободен'
-            WHERE code_room = code_r;
-
-            -- Перенос данных в хранилище (таблица фактов)
-            INSERT INTO h_fact_table (
-                h_id_residents,
-                h_date_begin,
-                h_date_end,
-                h_enter_money_services,
-                h_enter_money_residents,
-                h_code_room,
-                h_code_category,
-                h_code_person
-            ) VALUES (
-                c_res,
-                (SELECT date_check_in FROM residents WHERE code_person = code_p),
-                date_out,
-                (SELECT SUM(summa) FROM pay_residents WHERE code_residents = c_res),
-                (SELECT SUM(summa) FROM pay_services WHERE code_residents = c_res),
-                code_r,
-                code_c,
-                code_p
-            );
-
-            -- Перенос данных по услугам в хранилище
-            INSERT INTO h_pay_services (
-                h_code_pay_services,
-                h_count,
-                h_summa,
-                h_enter_money,
-                h_code_services,
-                h_date_pay,
-                h_id_residents
-            )
-            SELECT
-                code_pay_services,
-                count,
-                summa,
-                enter_money,
-                code_services,
-                date_pay,
-                code_residents
-            FROM pay_services
-            WHERE code_residents = c_res;
-
-            -- Очистка оперативных таблиц
-            DELETE FROM pay_services WHERE code_residents = c_res;
-            DELETE FROM pay_residents WHERE code_residents = c_res;
-            DELETE FROM residents WHERE code_person = code_p;
+        --Обновление статуса номера в БД
+        IF p_new_status IS NOT NULL THEN
+            UPDATE room
+               SET code_status = p_new_status
+             WHERE code_room = p_code_r;
         END IF;
+
+
+        -- Перенос данных в хранилище (архивация)
+
+        SELECT NVL(SUM(summa), 0) INTO p_sum_res  FROM pay_residents WHERE code_residents = p_c_res;
+        SELECT NVL(SUM(summa), 0) INTO p_sum_serv FROM pay_services  WHERE code_residents = p_c_res;
+
+        INSERT INTO h_fact_table (
+            h_id_residents,
+            h_date_begin,
+            h_date_end,
+            h_enter_money_services,
+            h_enter_money_residents,
+            h_code_room,
+            h_code_category,
+            h_code_person
+        ) VALUES (
+            p_c_res,
+            p_date_check_in,
+            date_out,
+            p_sum_serv,
+            p_sum_res,
+            p_code_r,
+            p_code_c,
+            code_p
+        );
+
+        INSERT INTO h_pay_services (
+            h_code_pay_services,
+            h_count,
+            h_summa,
+            h_enter_money,
+            h_code_services,
+            h_date_pay,
+            h_id_residents
+        )
+        SELECT
+            code_pay_services,
+            count,
+            summa,
+            enter_money,
+            code_services,
+            date_pay,
+            code_residents
+        FROM pay_services
+        WHERE code_residents = p_c_res;
+
+        DELETE FROM pay_services  WHERE code_residents = p_c_res;
+        DELETE FROM pay_residents WHERE code_residents = p_c_res;
+        DELETE FROM residents     WHERE code_person = code_p;
+
+        err := 'Выполнено выселение!';
     END IF;
 
-    -- Формирование сообщений о задолженности/переплате
+    -- Формирование сообщений о задолженности или переплате.
+    -- Заполняет вспомогательные выходные параметры err1 и err2.
+    err1 := NULL;
+    err2 := NULL;
+
     IF (err_count_r > 0) THEN
         err1 := 'Долг за проживание';
-    END IF;
-
-    IF (err_count_r < 0) THEN
+    ELSIF (err_count_r < 0) THEN
         err1 := 'Переплата за проживание';
-        err_count_r := -err_count_r;
+        err_count_r := -err_count_r; -- Приведение к положительному числу для отчета
     END IF;
 
     IF (err_count_s > 0) THEN
         err2 := 'Долг за услуги';
-    END IF;
-
-    IF (err_count_s < 0) THEN
+    ELSIF (err_count_s < 0) THEN
         err2 := 'Переплата за услуги';
-        err_count_s := -err_count_s;
+        err_count_s := -err_count_s; -- Приведение к положительному числу для отчета
     END IF;
 
+EXCEPTION
+    WHEN OTHERS THEN
+        err := 'Ошибка выселения: ' || SQLERRM;
 END check_out_person;
