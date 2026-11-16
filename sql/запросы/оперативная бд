@@ -1,0 +1,14 @@
+1. Текущие жильцы и их номера
+SELECT 
+    p.fio AS гость,
+    p.sex AS пол,
+    r.code_room AS номер,
+    c.name_category AS категория,
+    s.name_status AS статус_номера,
+    res.date_check_in AS дата_въезда,
+    res.date_check_out AS дата_выезда
+FROM residents res
+JOIN person p ON p.code_person = res.code_person
+JOIN room r ON r.code_room = res.code_room
+JOIN categories c ON c.code_category = r.code_category
+JOIN status_room s ON s.code_status = r.code_status;
